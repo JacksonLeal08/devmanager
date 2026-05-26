@@ -2,6 +2,7 @@
 // login.php
 session_start();
 require_once 'config/config.php';
+require_once 'config/database.php';
 
 // Redirect to dashboard if already logged in
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
@@ -15,17 +16,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = isset($_POST['email']) ? trim($_POST['email']) : '';
     $senha = isset($_POST['password']) ? trim($_POST['password']) : '';
 
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest');
+
     if (!empty($email) && !empty($senha)) {
-        if ($email === AUTH_EMAIL && $senha === AUTH_PASSWORD) {
-            $_SESSION['logged_in'] = true;
-            $_SESSION['email'] = $email;
-            header("Location: index.php");
-            exit();
+        // Authenticate via database
+        $database = new Database();
+        $db = $database->getConnection();
+        
+        if ($db) {
+            $query = "SELECT id, nome_completo, email, senha, tipo_conta, foto_path FROM usuarios WHERE email = :email LIMIT 0,1";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(':email', $email);
+            $stmt->execute();
+            $db_user = $stmt->fetch();
+            
+            if ($db_user && password_verify($senha, $db_user['senha'])) {
+                $_SESSION['logged_in'] = true;
+                $_SESSION['email'] = $db_user['email'];
+                $_SESSION['nome'] = $db_user['nome_completo'];
+                $_SESSION['tipo_conta'] = $db_user['tipo_conta'];
+                $_SESSION['foto_path'] = $db_user['foto_path'];
+                
+                if ($isAjax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'redirect' => 'index.php']);
+                    exit();
+                }
+                header("Location: index.php");
+                exit();
+            } else {
+                $error = "E-mail ou senha incorretos.";
+            }
         } else {
-            $error = "E-mail ou senha incorretos.";
+            $error = "Erro de conexão com o banco de dados.";
         }
     } else {
         $error = "Por favor, preencha todos os campos.";
+    }
+
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $error]);
+        exit();
     }
 }
 ?>
@@ -294,9 +326,130 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 padding: 40px 30px;
             }
         }
+
+        /* Cinematic Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #02050a; /* ultra dark grey/black */
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .loading-logo-container {
+            margin-bottom: 35px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* Glowing logo effect */
+        .loading-logo {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+            border-radius: 20px;
+            box-shadow: 0 0 35px rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.1);
+            animation: pulseGlow 4s infinite ease-in-out;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: 0 0 25px rgba(6, 182, 212, 0.15);
+                border-color: rgba(6, 182, 212, 0.08);
+            }
+            50% {
+                box-shadow: 0 0 45px rgba(16, 185, 129, 0.3);
+                border-color: rgba(16, 185, 129, 0.25);
+            }
+        }
+
+        /* Comet tail progress bar container */
+        .comet-bar-container {
+            width: 380px;
+            max-width: 85%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            overflow: visible; /* so the glow can expand beyond the bar height */
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+            margin-bottom: 25px;
+        }
+
+        /* Progress bar fill with comet tail gradient */
+        .comet-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(6, 182, 212, 0.05) 0%, rgba(6, 182, 212, 0.7) 65%, rgba(16, 185, 129, 1) 100%);
+            border-radius: 10px;
+            position: relative;
+            transition: width 0.05s linear;
+        }
+
+        /* Comet head - bright glowing dot on the tip of progress */
+        .comet-bar-fill::after {
+            content: '';
+            position: absolute;
+            right: -3px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 10px;
+            height: 10px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 
+                0 0 8px #fff,
+                0 0 15px rgba(16, 185, 129, 1),
+                0 0 25px rgba(6, 182, 212, 1);
+        }
+
+        /* Cinematic loading text */
+        .loading-text {
+            font-size: 0.9rem;
+            color: rgba(243, 244, 246, 0.6); /* soft white */
+            letter-spacing: 0.08em;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            animation: pulseText 2.5s infinite ease-in-out;
+        }
+
+        @keyframes pulseText {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; text-shadow: 0 0 8px rgba(255, 255, 255, 0.15); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- CINEMATIC LOADING OVERLAY -->
+    <div class="loading-overlay" id="loading-screen">
+        <div class="loading-logo-container">
+            <img class="loading-logo" src="public/logo_cl.jpg" alt="Castro & Leal Logo">
+        </div>
+        <div class="comet-bar-container">
+            <div class="comet-bar-fill" id="loading-bar"></div>
+        </div>
+        <div class="loading-text">Iniciando ecossistema digital...</div>
+    </div>
 
     <div class="login-container">
         
@@ -398,6 +551,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 eyeIcon.className = 'fa-solid fa-eye-slash';
             }
         });
+
+        // Intercept form submission and run AJAX login + cinematic loading
+        const loginForm = document.querySelector('form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const btn = loginForm.querySelector('.btn-login');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Validando...`;
+                
+                const formData = new FormData(loginForm);
+                
+                try {
+                    const response = await fetch('login.php', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Success! Trigger cinematic loading overlay
+                        triggerCinematicLoading(data.redirect);
+                    } else {
+                        // Error! Show toast notification and reset button
+                        showNotification(data.message || 'Erro ao realizar login.', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
+                } catch (err) {
+                    showNotification('Erro de rede ou servidor ao realizar login.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            });
+        }
+
+        // Cinematic Loading bar progress animation (50fps)
+        function triggerCinematicLoading(redirectUrl) {
+            const overlay = document.getElementById('loading-screen');
+            const bar = document.getElementById('loading-bar');
+            
+            if (overlay && bar) {
+                overlay.classList.add('active');
+                
+                let progress = 0;
+                const duration = 2500; // 2.5 seconds
+                const intervalTime = 20; // update every 20ms
+                const step = 100 / (duration / intervalTime);
+                
+                const timer = setInterval(() => {
+                    progress += step;
+                    if (progress >= 100) {
+                        progress = 100;
+                        clearInterval(timer);
+                        setTimeout(() => {
+                            window.location.href = redirectUrl;
+                        }, 250); // delay so it sits nicely at 100% before transition
+                    }
+                    bar.style.width = progress + '%';
+                }, intervalTime);
+            } else {
+                window.location.href = redirectUrl;
+            }
+        }
     </script>
 
     <?php if (!empty($error)): ?>

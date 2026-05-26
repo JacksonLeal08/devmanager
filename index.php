@@ -525,8 +525,60 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
             background: var(--border-color);
             border-radius: 4px;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
+        /* Avatar Upload and Lightbox Styles */
+        .avatar-preview-wrapper {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 3px solid var(--primary);
+            box-shadow: var(--shadow);
+            background: rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .avatar-preview-wrapper:hover {
+            transform: scale(1.06);
+            border-color: var(--purple-accent);
+            box-shadow: var(--shadow-lg);
+        }
+        .avatar-hover-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+            backdrop-filter: blur(1px);
+        }
+        .avatar-preview-wrapper:hover .avatar-hover-overlay {
+            opacity: 1;
+        }
+
+        /* Confirm Modal Button Styling & Animations */
+        #confirm-btn-cancelar, #confirm-btn-confirmar {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #confirm-btn-cancelar:hover {
+            background-color: var(--border-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        #confirm-btn-confirmar:hover {
+            background-color: #dc2626 !important; /* Vermelho mais escuro no hover */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+        }
+        #confirm-btn-cancelar:active, #confirm-btn-confirmar:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
 
         /* Responsive Design */
@@ -550,11 +602,28 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
             <i class="fa-solid fa-laptop-code"></i>
             <span>DevManager</span>
         </div>
+        
+        <!-- Logged-in User Profile Card -->
+        <div class="user-card" style="padding: 16px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px;">
+            <?php if (!empty($_SESSION['foto_path'])): ?>
+                <img src="<?php echo htmlspecialchars($_SESSION['foto_path']); ?>" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
+            <?php else: ?>
+                <div style="width: 42px; height: 42px; border-radius: 50%; background: var(--sidebar-active); display: flex; align-items: center; justify-content: center; border: 2px solid var(--primary); font-weight: bold; color: white;">
+                    <?php echo strtoupper(substr($_SESSION['nome'], 0, 1)); ?>
+                </div>
+            <?php endif; ?>
+            <div style="overflow: hidden; flex: 1;">
+                <div style="font-weight: 600; font-size: 0.85rem; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($_SESSION['nome']); ?></div>
+                <div style="font-size: 0.75rem; color: var(--sidebar-text);"><?php echo htmlspecialchars($_SESSION['tipo_conta']); ?></div>
+            </div>
+        </div>
+
         <ul class="nav-links">
             <li class="nav-item active" data-target="dashboard"><i class="fa-solid fa-chart-pie"></i> Dashboard</li>
             <li class="nav-item" data-target="clientes"><i class="fa-solid fa-users"></i> Clientes</li>
             <li class="nav-item" data-target="projetos"><i class="fa-solid fa-cubes"></i> Projetos</li>
             <li class="nav-item" data-target="planos"><i class="fa-solid fa-layer-group"></i> Planos</li>
+            <li class="nav-item" data-target="usuarios"><i class="fa-solid fa-user-gear"></i> Usuários</li>
         </ul>
         <div class="sidebar-footer">
             <button id="theme-toggle" class="btn-theme">
@@ -683,6 +752,32 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                 </button>
             </div>
             <div id="container-planos">
+            </div>
+        </section>
+
+        <!-- USER CONTROL PAGE -->
+        <section id="usuarios" class="page">
+            <div class="header-actions">
+                <h1>Controle de Usuários</h1>
+                <button class="btn btn-primary" onclick="abrirModalUsuario()">
+                    <i class="fa-solid fa-user-plus"></i> Novo Usuário
+                </button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Foto</th>
+                            <th>Nome Completo</th>
+                            <th>E-mail</th>
+                            <th>Contato</th>
+                            <th>Tipo de Conta</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-usuarios">
+                    </tbody>
+                </table>
             </div>
         </section>
 
@@ -855,10 +950,142 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         </div>
     </div>
 
+    <!-- USER MODAL -->
+    <div class="modal-overlay" id="modal-usuario">
+        <div class="modal-content">
+            <button class="modal-close" onclick="fecharModal('modal-usuario')">&times;</button>
+            <h2 id="modal-usuario-title">Novo Usuário</h2>
+            <form id="form-usuario" enctype="multipart/form-data">
+                <input type="hidden" id="usr-id" name="id">
+                
+                <!-- Profile picture circle preview with interactive hover/zoom -->
+                <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; width: 100%;">
+                    <div id="usr-foto-preview-container" class="avatar-preview-wrapper" title="Clique para ampliar">
+                        <img id="usr-foto-preview" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                        <div id="usr-foto-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 2.2rem;">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div class="avatar-hover-overlay">
+                            <i class="fa-solid fa-magnifying-glass-plus" style="margin-right: 4px;"></i> Ampliar
+                        </div>
+                    </div>
+                    <label for="usr-foto" style="margin-top: 10px; cursor: pointer;" class="btn btn-secondary btn-sm">
+                        <i class="fa-solid fa-camera"></i> Escolher Foto
+                    </label>
+                    <input type="file" id="usr-foto" name="foto" accept="image/*" style="display: none;">
+                </div>
+
+                <div class="form-grid">
+                    <div class="full-width">
+                        <label>Nome Completo *</label>
+                        <input type="text" id="usr-nome" name="nome" class="form-control" required>
+                    </div>
+                    <div>
+                        <label>E-mail *</label>
+                        <input type="email" id="usr-email" name="email" class="form-control" required>
+                    </div>
+                    <div>
+                        <label>Contato</label>
+                        <input type="text" id="usr-contato" name="contato" class="form-control" placeholder="(xx) xxxxx-xxxx">
+                    </div>
+                    <div>
+                        <label>Senha * <span id="pwd-help-text" style="font-weight: normal; color: var(--text-muted);">(deixe em branco para manter)</span></label>
+                        <input type="password" id="usr-senha" name="senha" class="form-control" required autocomplete="new-password">
+                    </div>
+                    <div>
+                        <label>Tipo de Conta *</label>
+                        <select id="usr-tipo" name="tipoConta" class="form-control" required>
+                            <option value="Administrador">Administrador</option>
+                            <option value="Gerente">Gerente</option>
+                            <option value="Desenvolvedor">Desenvolvedor</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary full-width" style="margin-top: 15px;">Salvar Usuário</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONFIRMATION DIALOG -->
+    <div class="modal-overlay" id="modal-confirmacao">
+        <div class="modal-content" style="max-width: 440px; border-top: 4px solid var(--danger); text-align: center; padding: 28px;">
+            <div style="font-size: 3rem; color: var(--danger); margin-bottom: 12px; display: inline-flex; align-items: center; justify-content: center; width: 70px; height: 70px; border-radius: 50%; background: rgba(239, 68, 68, 0.1);">
+                <i class="fa-solid fa-circle-exclamation" style="font-size: 2.2rem;"></i>
+            </div>
+            <h2 style="font-size: 1.3rem; margin-top: 10px; margin-bottom: 10px; color: var(--text-main); font-weight: 700;">Confirmar Exclusão</h2>
+            
+            <!-- Logged in user info -->
+            <div style="font-size: 0.8rem; background: rgba(0,0,0,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); color: var(--text-muted); margin-bottom: 18px; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-user-shield" style="color: var(--primary);"></i> Operador: <strong><?php echo htmlspecialchars($_SESSION['nome']); ?></strong> (<span style="font-style: italic;"><?php echo htmlspecialchars($_SESSION['tipo_conta']); ?></span>)
+            </div>
+            
+            <p id="confirm-mensagem" style="font-size: 0.95rem; margin-bottom: 15px; color: var(--text-main); line-height: 1.5;"></p>
+            <p style="font-size: 0.85rem; color: var(--danger); font-weight: 600; margin-bottom: 25px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-triangle-exclamation"></i> Essa ação é definitiva e não pode ser desfeita!
+            </p>
+            
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn btn-secondary" id="confirm-btn-cancelar" style="flex: 1; justify-content: center;">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirm-btn-confirmar" style="flex: 1; justify-content: center; background-color: var(--danger); color: white;">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- IMAGE LIGHTBOX MODAL -->
+    <div class="modal-overlay" id="modal-lightbox" onclick="fecharModal('modal-lightbox')">
+        <div class="modal-content" style="max-width: 500px; background: transparent; border: none; box-shadow: none; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: visible;" onclick="event.stopPropagation()">
+            <button class="modal-close" style="color: white; background: rgba(0,0,0,0.5); top: -45px; right: 0;" onclick="fecharModal('modal-lightbox')">&times;</button>
+            <div style="position: relative; width: 100%; max-height: 70vh; border-radius: 12px; overflow: hidden; background: #000; border: 2px solid var(--border-color); box-shadow: var(--shadow-lg);">
+                <img id="lightbox-img" src="" style="width: 100%; height: auto; max-height: 70vh; display: block; object-fit: contain; transition: transform 0.3s ease;">
+            </div>
+            <!-- Slider for Zoom -->
+            <div style="margin-top: 15px; background: rgba(15,23,42,0.85); padding: 10px 20px; border-radius: 30px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--border-color); width: 220px; justify-content: center; backdrop-filter: blur(4px);">
+                <i class="fa-solid fa-magnifying-glass-minus" style="color: white; cursor: pointer;" onclick="ajustarZoomLightbox(-0.25)"></i>
+                <input type="range" id="lightbox-zoom-range" min="1" max="3" step="0.1" value="1" style="flex: 1; cursor: pointer; accent-color: var(--primary);">
+                <i class="fa-solid fa-magnifying-glass-plus" style="color: white; cursor: pointer;" onclick="ajustarZoomLightbox(0.25)"></i>
+            </div>
+        </div>
+    </div>
+
     <!-- Script Application Logic -->
     <script>
         // --- APP STATE ---
-        let appData = { clientes: [], projetos: [], tiposPlano: [], modalidadesPlano: [] };
+        let appData = { clientes: [], projetos: [], tiposPlano: [], modalidadesPlano: [], usuarios: [] };
+
+        // --- CUSTOM CONFIRM DIALOG LOGIC ---
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function showConfirmDialog(tipoElemento, nomeElemento, onConfirm) {
+            const msgEl = document.getElementById('confirm-mensagem');
+            if (msgEl) {
+                msgEl.innerHTML = `Tem certeza que deseja excluir o ${tipoElemento} <strong>"${escapeHTML(nomeElemento)}"</strong>?`;
+            }
+            
+            const btnConfirmar = document.getElementById('confirm-btn-confirmar');
+            const btnCancelar = document.getElementById('confirm-btn-cancelar');
+            
+            if (btnConfirmar && btnCancelar) {
+                const newBtnConfirmar = btnConfirmar.cloneNode(true);
+                const newBtnCancelar = btnCancelar.cloneNode(true);
+                
+                btnConfirmar.parentNode.replaceChild(newBtnConfirmar, btnConfirmar);
+                btnCancelar.parentNode.replaceChild(newBtnCancelar, btnCancelar);
+                
+                newBtnCancelar.addEventListener('click', () => {
+                    fecharModal('modal-confirmacao');
+                });
+                
+                newBtnConfirmar.addEventListener('click', () => {
+                    fecharModal('modal-confirmacao');
+                    onConfirm();
+                });
+            }
+            
+            abrirModal('modal-confirmacao');
+        }
 
         // Toast notifications system
         function showNotification(message, type = 'success') {
@@ -892,8 +1119,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                 const responsePlanos = await fetch('/devmanager/api/planos.php');
                 const responseModalidades = await fetch('/devmanager/api/modalidades.php');
                 const responseProjetos = await fetch('/devmanager/api/projetos.php');
+                const responseUsuarios = await fetch('/devmanager/api/usuarios.php');
 
-                if (!responseClientes.ok || !responsePlanos.ok || !responseModalidades.ok || !responseProjetos.ok) {
+                if (!responseClientes.ok || !responsePlanos.ok || !responseModalidades.ok || !responseProjetos.ok || !responseUsuarios.ok) {
                     throw new Error('Erro nas requisições da API.');
                 }
 
@@ -901,6 +1129,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                 const planos = await responsePlanos.json();
                 const modalidades = await responseModalidades.json();
                 const projetos = await responseProjetos.json();
+                const usuarios = await responseUsuarios.json();
 
                 // Map data types correctly to prevent string comparison errors
                 appData.clientes = clientes.map(c => ({
@@ -924,6 +1153,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                     clienteId: parseInt(p.clienteId),
                     modalidadeId: p.modalidadeId ? parseInt(p.modalidadeId) : null,
                     valorTotal: parseFloat(p.valorTotal)
+                }));
+                appData.usuarios = usuarios.map(u => ({
+                    ...u,
+                    id: parseInt(u.id)
                 }));
 
                 updateUI(); 
@@ -965,6 +1198,21 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                 const form = document.querySelector(`#${id} form`);
                 if (form) form.reset();
             }
+            if (id === 'modal-usuario') {
+                const previewImg = document.getElementById('usr-foto-preview');
+                const placeholderEl = document.getElementById('usr-foto-placeholder');
+                if (previewImg && placeholderEl) {
+                    previewImg.src = '';
+                    previewImg.style.display = 'none';
+                    placeholderEl.style.display = 'flex';
+                }
+            }
+            if (id === 'modal-lightbox') {
+                const lightboxImg = document.getElementById('lightbox-img');
+                const zoomRange = document.getElementById('lightbox-zoom-range');
+                if (lightboxImg) lightboxImg.style.transform = 'scale(1)';
+                if (zoomRange) zoomRange.value = 1;
+            }
         }
 
         // --- UI DRAW/UPDATE CONTROLLER ---
@@ -973,6 +1221,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
             renderClientes();
             renderProjetos();
             renderPlanos();
+            renderUsuarios();
         }
 
         // --- DASHBOARD SCREEN ---
@@ -1115,7 +1364,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         }
 
         window.excluirCliente = function(id) {
-            if (confirm("Tem certeza que deseja excluir este cliente? Seus projetos vinculados serão excluídos permanentemente no banco de dados.")) {
+            const cliente = appData.clientes.find(c => c.id === id);
+            const nomeCliente = cliente ? cliente.nome : `Cliente #${id}`;
+            showConfirmDialog('cliente', nomeCliente, () => {
                 fetch(`/devmanager/api/clientes.php?id=${id}`, { method: 'DELETE' })
                     .then(res => res.json().then(data => ({ status: res.status, data })))
                     .then(resObj => {
@@ -1128,7 +1379,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                     .catch(err => {
                         showNotification("Erro: " + err.message, 'error');
                     });
-            }
+            });
         }
 
         // --- PROJECTS SCREEN ---
@@ -1359,7 +1610,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         }
 
         window.excluirProjeto = function(id) {
-            if (confirm("Tem certeza que deseja excluir este projeto permanentemente?")) {
+            const proj = appData.projetos.find(p => p.id === id);
+            const nomeProjeto = proj ? proj.nome : `Projeto #${id}`;
+            showConfirmDialog('projeto', nomeProjeto, () => {
                 fetch(`/devmanager/api/projetos.php?id=${id}`, { method: 'DELETE' })
                     .then(res => res.json().then(data => ({ status: res.status, data })))
                     .then(resObj => {
@@ -1372,7 +1625,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                     .catch(err => {
                         showNotification("Erro: " + err.message, 'error');
                     });
-            }
+            });
         }
 
         window.visualizarInsight = function(id) {
@@ -1490,7 +1743,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         });
 
         window.excluirTipoPlano = function(id) {
-            if (confirm("Excluir este plano apagará todas as suas modalidades de forma definitiva. Projetos associados a elas ficarão sem plano. Deseja continuar?")) {
+            const plano = appData.tiposPlano.find(p => p.id === id);
+            const nomePlano = plano ? plano.nome : `Plano #${id}`;
+            showConfirmDialog('plano de cobrança', nomePlano, () => {
                 fetch(`/devmanager/api/planos.php?id=${id}`, { method: 'DELETE' })
                     .then(res => res.json().then(data => ({ status: res.status, data })))
                     .then(resObj => {
@@ -1503,7 +1758,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                     .catch(err => {
                         showNotification("Erro: " + err.message, 'error');
                     });
-            }
+            });
         }
 
         window.abrirModalModalidade = function(tipoId) {
@@ -1553,7 +1808,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         });
 
         window.excluirModalidade = function(id) {
-            if (confirm("Tem certeza que deseja excluir esta modalidade? Projetos vinculados a ela não perderão os valores históricos, mas ficarão sem referência de plano.")) {
+            const modalidade = appData.modalidadesPlano.find(m => m.id === id);
+            const nomeModalidade = modalidade ? modalidade.nome : `Modalidade #${id}`;
+            showConfirmDialog('modalidade de plano', nomeModalidade, () => {
                 fetch(`/devmanager/api/modalidades.php?id=${id}`, { method: 'DELETE' })
                     .then(res => res.json().then(data => ({ status: res.status, data })))
                     .then(resObj => {
@@ -1566,7 +1823,164 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
                     .catch(err => {
                         showNotification("Erro: " + err.message, 'error');
                     });
+            });
+        }
+
+        // --- USERS SCREEN ---
+        function renderUsuarios() {
+            const tbody = document.getElementById('table-usuarios');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (appData.usuarios.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 20px;">Nenhum usuário cadastrado.</td></tr>';
+            } else {
+                appData.usuarios.forEach(u => {
+                    let photoHTML = '';
+                    if (u.fotoPath) {
+                        photoHTML = `<img src="${u.fotoPath}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);">`;
+                    } else {
+                        photoHTML = `<div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem;">${u.nome.charAt(0).toUpperCase()}</div>`;
+                    }
+
+                    let badgeClass = 'status-pausado';
+                    if (u.tipoConta === 'Administrador') badgeClass = 'status-cancelado';
+                    else if (u.tipoConta === 'Gerente') badgeClass = 'status-andamento';
+                    else if (u.tipoConta === 'Desenvolvedor') badgeClass = 'status-negociacao';
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td style="width: 60px;">${photoHTML}</td>
+                            <td><strong>${u.nome}</strong></td>
+                            <td>${u.email}</td>
+                            <td>${u.contato || '-'}</td>
+                            <td><span class="status-badge ${badgeClass}">${u.tipoConta}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-secondary" onclick="editarUsuario(${u.id})"><i class="fa-solid fa-user-pen"></i></button>
+                                <button class="btn btn-sm btn-danger" onclick="excluirUsuario(${u.id})"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
             }
+        }
+
+        window.abrirModalUsuario = function() {
+            document.getElementById('modal-usuario-title').innerText = "Novo Usuário";
+            document.getElementById('form-usuario').reset();
+            document.getElementById('usr-id').value = '';
+            document.getElementById('usr-senha').required = true;
+            document.getElementById('pwd-help-text').style.display = 'none';
+            
+            // Reset photo preview to empty / placeholder state
+            const previewImg = document.getElementById('usr-foto-preview');
+            const placeholderEl = document.getElementById('usr-foto-placeholder');
+            if (previewImg && placeholderEl) {
+                previewImg.src = '';
+                previewImg.style.display = 'none';
+                placeholderEl.style.display = 'flex';
+            }
+            
+            abrirModal('modal-usuario');
+        }
+
+        window.editarUsuario = function(id) {
+            document.getElementById('modal-usuario-title').innerText = "Editar Usuário";
+            document.getElementById('form-usuario').reset();
+            
+            const u = appData.usuarios.find(usr => usr.id === id);
+            if (u) {
+                document.getElementById('usr-id').value = u.id;
+                document.getElementById('usr-nome').value = u.nome;
+                document.getElementById('usr-email').value = u.email;
+                document.getElementById('usr-contato').value = u.contato || '';
+                document.getElementById('usr-tipo').value = u.tipoConta;
+                document.getElementById('usr-senha').required = false;
+                document.getElementById('pwd-help-text').style.display = 'inline';
+                
+                // Show existing user photo preview if available
+                const previewImg = document.getElementById('usr-foto-preview');
+                const placeholderEl = document.getElementById('usr-foto-placeholder');
+                if (previewImg && placeholderEl) {
+                    if (u.fotoPath) {
+                        previewImg.src = u.fotoPath;
+                        previewImg.style.display = 'block';
+                        placeholderEl.style.display = 'none';
+                    } else {
+                        previewImg.src = '';
+                        previewImg.style.display = 'none';
+                        placeholderEl.style.display = 'flex';
+                    }
+                }
+                
+                abrirModal('modal-usuario');
+            }
+        }
+
+        document.getElementById('form-usuario').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('usr-id').value;
+            const password = document.getElementById('usr-senha').value;
+            
+            if (!id && !password) {
+                showNotification("A senha é obrigatória para cadastrar novos usuários.", "warning");
+                return;
+            }
+
+            const formData = new FormData(this);
+            const button = e.submitter;
+            const originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner"></span> Gravando...`;
+
+            try {
+                const response = await fetch('/devmanager/api/usuarios.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const resData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(resData.message || 'Erro ao salvar usuário.');
+                }
+
+                showNotification(resData.message || 'Usuário salvo com sucesso!', 'success');
+                fecharModal('modal-usuario');
+                await loadData();
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+
+        window.excluirUsuario = function(id) {
+            // Check if current user is deleting themselves
+            const currentEmail = '<?php echo $_SESSION['email']; ?>';
+            const u = appData.usuarios.find(usr => usr.id === id);
+            
+            if (u && u.email === currentEmail) {
+                showNotification("Você não pode excluir sua própria conta enquanto estiver logado.", "warning");
+                return;
+            }
+
+            const nomeUsuario = u ? u.nome : `Usuário #${id}`;
+            showConfirmDialog('usuário', nomeUsuario, () => {
+                fetch(`/devmanager/api/usuarios.php?id=${id}`, { method: 'DELETE' })
+                    .then(res => res.json().then(data => ({ status: res.status, data })))
+                    .then(resObj => {
+                        if (resObj.status !== 200) {
+                            throw new Error(resObj.data.message || 'Erro ao excluir.');
+                        }
+                        showNotification(resObj.data.message, 'success');
+                        loadData();
+                    })
+                    .catch(err => {
+                        showNotification("Erro: " + err.message, 'error');
+                    });
+            });
         }
 
         // --- THEME SELECTOR SYSTEM (DARK / LIGHT) ---
@@ -1591,6 +2005,67 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
             
             localStorage.setItem('theme', theme);
         });
+
+        // --- USER PHOTO PREVIEW & LIGHTBOX ZOOM SYSTEM ---
+        const fileInput = document.getElementById('usr-foto');
+        const imgPreview = document.getElementById('usr-foto-preview');
+        const placeholder = document.getElementById('usr-foto-placeholder');
+        const previewContainer = document.getElementById('usr-foto-preview-container');
+        const lightboxModal = document.getElementById('modal-lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const zoomRange = document.getElementById('lightbox-zoom-range');
+
+        // FileReader preview when file input changes
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        if (imgPreview && placeholder) {
+                            imgPreview.src = e.target.result;
+                            imgPreview.style.display = 'block';
+                            placeholder.style.display = 'none';
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+        // Open Lightbox Zoom Modal when clicking the preview wrapper
+        if (previewContainer) {
+            previewContainer.addEventListener('click', function() {
+                if (imgPreview && imgPreview.src && imgPreview.style.display !== 'none') {
+                    if (lightboxImg && zoomRange) {
+                        lightboxImg.src = imgPreview.src;
+                        zoomRange.value = 1;
+                        lightboxImg.style.transform = 'scale(1)';
+                        abrirModal('modal-lightbox');
+                    }
+                }
+            });
+        }
+
+        // Lightbox Slider range input event mapping to CSS scale transform
+        if (zoomRange) {
+            zoomRange.addEventListener('input', function() {
+                if (lightboxImg) {
+                    lightboxImg.style.transform = `scale(${this.value})`;
+                }
+            });
+        }
+
+        // Lightbox programmatical adjustment via +/- zoom buttons
+        window.ajustarZoomLightbox = function(delta) {
+            if (zoomRange && lightboxImg) {
+                let newVal = parseFloat(zoomRange.value) + delta;
+                if (newVal < 1) newVal = 1;
+                if (newVal > 3) newVal = 3;
+                zoomRange.value = newVal;
+                lightboxImg.style.transform = `scale(${newVal})`;
+            }
+        }
 
         // --- APP INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', loadData);
